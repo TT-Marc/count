@@ -1,0 +1,246 @@
+;;;;;;;;;;;;;;;;[  更新日志  ];;;;;;;;;;;;;;;;;;;;
+;;                                              ;;
+;;  2018-11-4  v0.4                             ;;
+;;  新增以下功能：                              ;;
+;;  1、设置的统计图层0-count更改为不打印        ;;
+;;  2、统计完之后还原捕捉模式                   ;;
+;;::::::::::::::::::::::::::::::::::::::::::::::;;
+;;                                              ;;
+;;  2018-11-5  v0.5                             ;;
+;;  新增以下功能：                              ;;
+;;  1、统计道路时既输出面积又输出长度           ;;
+;;::::::::::::::::::::::::::::::::::::::::::::::;;
+;pt_lst1 
+(defun c:tt (/ blkname1 blkname2 elist1 elist2 elist3 en_type1 en_type2 en_type3 en1 en2 en3 faith-endundo faith-lst->string faith-startundo hei1 layname1 layname2 layname3 len3 lst_new lst_old lst1 lst2 n1 pt1 ss1 ss2 ss3 ptnum ptcountnum pt_ysum pt_xsum text_x text_y text_pt text_hei pt_x1 pt_y1 laycur oscur entdata_count)
+	(vl-load-com)
+	;;找到当前层
+	(setq laycur (getvar "clayer"))
+	(setq oscur (getvar "OSMODE"))
+	;;;;指定当前图层为指定图层
+	(setq chklay (tblsearch "layer" "0-count"))
+	(if (= chklay nil)
+		(command "layer" "n" "0-count" "c" 1 "0-count" "")
+	)
+	(setvar "clayer" "0-count")
+	;;;;指定当前图层完毕
+	;将0-count图层设置为不打印
+	(setq entdata_count (entget (tblobjname "layer" "0-count"))
+		entdata_count (subst (cons 290 0) (assoc 290 entdata_count) entdata_count)
+	)
+	(entmod entdata_count)
+	;将0-count图层设置为不打印完毕
+	(setvar "osmode" 0)
+	(setvar "blipmode" 0)
+	(progn
+		(defun Faith-lst->string (lst / str1)
+			(setq str1 "")
+			(mapcar (function (lambda (x)
+													(setq str1 (strcat str1 "," x))
+												)
+							)
+				lst
+			)
+			(setq str1 (substr str1 2))
+			(if (/= "" str1)
+				str1
+			)
+		)
+		(defun Faith-StartUndo ()
+			(Faith-EndUndo)
+			(vla-StartUndoMark (vla-get-ActiveDocument (vlax-get-acad-object)))
+		)
+		(defun Faith-EndUndo ()
+			(while (= 8 (logand 8 (getvar "UNDOCTL")))
+				(vla-EndUndoMark (vla-get-ActiveDocument (vlax-get-acad-object)))
+			)
+		)
+	)
+	(setq ss1 (ssget '((0 . "insert,lwPolyLine,PolyLine"))))
+	(if ss1
+		(progn
+			(repeat (setq n1 (sslength ss1))
+				(setq en1 (ssname ss1 (setq n1 (1- n1)))
+					elist1 (entget en1)
+					en_type1 (cdr (assoc 0 elist1))
+				)
+				(if (= "INSERT" en_type1)
+					(progn
+						(setq blkname1 (cdr (assoc 2 elist1)))
+						(if (not (member blkname1 lst1))
+							(setq lst1 (cons blkname1 lst1))
+						)
+					)
+					(progn
+						(setq layname1 (cdr (assoc 8 elist1)))
+						(if (not (member layname1 lst2))
+							(setq lst2 (cons layname1 lst2))
+						)
+					)
+				)
+			)
+			(setq blkname1 (Faith-lst->string lst1)
+				layname1 (Faith-lst->string lst2)
+				lst1 nil
+				lst2 nil
+			)
+			(if (or blkname1 layname1)
+				(progn
+					;(alert "警告！！！！ \n接下来的过程非常爽！！！！ \n 请小心操作【滑稽】【滑稽】【滑稽】【滑稽】【滑稽】【滑稽】【滑稽】")
+					(initget 1)
+					(setq pt1 (getpoint "\n指定输出文字放置点："))
+					(initget 6)
+					(setq hei1 (getreal "\n指定输出文字字高<5>："))
+					(if (not hei1) (setq hei1 5))
+					(setq text_hei (getreal "\n指定区域编号文字字高<20>："))
+					(if (not text_hei) (setq text_hei 20))					
+					(setq counten (entsel "\n选择多段线所在图层（点选）:"))
+					(if counten
+						(progn
+							(setq countlayer (cdr (assoc 8 (entget (car counten)))))			
+							(prompt "\n 请选择需要统计的范围（多段线，可框选cp）：")
+							(setq ss2 (ssget (list (cons 8 countlayer)
+															 )
+												)									
+							)
+							(if ss2
+								(progn
+									(setq areanum (sslength ss2))
+									(setq areacount 0)
+									(repeat areanum
+										(setq en2 (ssname ss2 areacount))
+										(setq elist2 (entget en2))
+										(if (and (= "LWPOLYLINE" (cdr (assoc 0 elist2)))(>= (cdr (assoc 90 elist2)) 3))
+											(progn
+												(setq pt_lst1 (mapcar 'cdr (vl-remove-if (function (lambda (x)
+																																						 (/= 10 (car x))
+																																					 )
+																																 )
+																										 elist2
+																									 )
+																			)
+												)
+												;;;;;插入区域编号开始
+												(setq ptnum (length pt_lst1))
+												(setq ptcountnum (1- ptnum))
+												(setq pt_xsum 0 pt_ysum 0)
+												(repeat ptnum
+													(setq pt_x1 (car (nth ptcountnum pt_lst1)))
+													(setq pt_y1 (cadr (nth ptcountnum pt_lst1)))
+													(setq pt_xsum (+ pt_xsum pt_x1)
+														pt_ysum (+ pt_ysum pt_y1)
+													)
+													(setq ptcountnum (1- ptcountnum))
+												)
+												(setq text_x (/ pt_xsum ptnum)
+													text_y (/ pt_ysum ptnum)
+												)
+												(setq text_pt (list text_x text_y))
+												(command "text" text_pt text_hei 0 (rtos (fix (1+ areacount))))
+												;;插入区域编号结束
+												(vl-cmdf "ZOOM" "o" en2 "")
+												(cond
+													((and blkname1 layname1)
+														(setq ss3 (ssget "cp" pt_lst1 (list '(-4 . "<or") '(-4 . "<and") '(0 . "insert") (cons 2 blkname1) '(-4 . "and>") '(-4 . "<and") '(0 . "lwPolyLine") (cons 8 layname1) '(-4 . "and>")  '(-4 . "<and") '(0 . "POLYLINE") (cons 8 layname1) '(-4 . "and>") '(-4 . "or>"))))
+													)
+													(blkname1
+														(setq ss3 (ssget "cp" pt_lst1 (list '(0 . "insert") (cons 2 blkname1))))
+													)
+													(layname1
+														(setq ss3 (ssget "cp" pt_lst1 (list '(-4 . "<or") '(-4 . "<and") '(0 . "lwPolyLine") (cons 8 layname1) '(-4 . "and>")  '(-4 . "<and") '(0 . "PolyLine") (cons 8 layname1) '(-4 . "and>") '(-4 . "or>"))))
+													)
+												)
+												(if ss3
+													(progn
+														(repeat (setq n3 (sslength ss3))
+															(setq en3 (ssname ss3 (setq n3 (1- n3)))
+																elist3 (entget en3)
+																en_type3 (cdr (assoc 0 elist3))
+															)
+															(if (= "INSERT" en_type3)
+																(progn
+																	(setq blkname3 (cdr (assoc 2 elist3)))
+																	(if (setq lst_old (assoc blkname3 lst1))
+																		(setq lst_new (list blkname3 (1+ (cadr lst_old)))
+																			lst1 (subst lst_new lst_old lst1)
+																		)
+																		(setq lst1 (cons (list blkname3 1) lst1))
+																	)
+																)
+																(progn
+																	(setq layname3 (cdr (assoc 8 elist3))
+																		len3 (vla-get-Length (vlax-ename->vla-object en3))
+																	)
+																	(if (setq lst_old (assoc layname3 lst2))
+																		(setq lst_new (list layname3 (1+ (cadr lst_old)) (+ len3 (caddr lst_old)))
+																			lst2 (subst lst_new lst_old lst2)
+																		)
+																		(setq lst2 (cons (list layname3 1 len3) lst2))
+																	)
+																)
+															)
+														)
+														(Faith-StartUndo)
+														(setvar "CMDECHO" 0)
+														(command "text" pt1 hei1 0 (rtos (fix (1+ areacount))))
+														(setq pt1 (polar pt1 (* 1.5 pi) (* 0.1 hei1)))
+														(setq pt_end (polar pt1 0 (* 20 hei1)))
+														(command "pline" pt1 pt_end "")
+														(setq pt1 (polar pt1 (* 1.5 pi) (* 1.7 hei1)))
+														(foreach x lst1
+															(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "个")) (cons 10 pt1) (cons 40 hei1)))
+															(setq pt1 (polar pt1 (* 1.5 pi) (* 1.7 hei1)))
+														)
+														(if lst1
+															(setq pt1 (polar pt1 (* 1.5 pi) (* 1.7 hei1)))
+														)
+														(foreach x lst2
+															;(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (caddr x)))) "米")) (cons 10 pt1) (cons 40 hei1)))
+															(cond
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*2.5m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 2.5 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*3.0m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 3.0 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*3.5m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 3.5 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*4.0m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 4.0 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*4.5m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 4.5 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																((and (wcmatch (car x) "*道路*") (wcmatch (car x) "*5.0m*"))
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (* 5.0 (caddr x))))) "平方米(" (itoa (1+ (fix (caddr x)))) "米)")) (cons 10 pt1) (cons 40 hei1)))
+																)
+																(t
+																	(entmakex (list '(0 . "TEXT") (cons 1 (strcat (car x) " 共：" (itoa (cadr x)) "条 合计：" (itoa (1+ (fix (caddr x)))) "米")) (cons 10 pt1) (cons 40 hei1)))
+																)
+															)
+															(setq pt1 (polar pt1 (* 1.5 pi) (* 1.7 hei1)))
+														)
+														(setq pt1 (polar pt1 (* 1.5 pi) (* 3.4 hei1)))
+														(setq lst1 nil)
+														(setq lst2 nil)
+														(Faith-EndUndo)
+													)
+												)
+											)
+										)
+										(setq areacount (1+ areacount))
+									)
+								)
+							)
+						)
+					)
+				)
+			)
+		)
+	)
+	(setvar "osmode" oscur)
+	(setvar "clayer" laycur)
+	(princ)
+)
+(princ "\n功能:统计多段线长度和块数量，命令:tt。作者:包你爽，QQ：1151272314")
+(princ)
